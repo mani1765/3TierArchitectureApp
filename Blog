@@ -1,0 +1,356 @@
+ AWS 3-tire Architecture Project
+
+Services used in this project:
+
+1. VPC
+
+2. EC2
+
+3. IAM
+
+4. S3
+
+5. RDS
+
+6. Certificate Manager
+
+7. Route53
+
+Architecture diagram
+
+
+
+
+Project Repo :-  AWS 3-tire architecture
+
+
+Step-by-step implementation :-
+
+1. Create VPC and more , Name : demo-vpc , CIDR : 192.168.0.0/22 , Number of availability zones : 2 , Number of public subnets : 2 , Number of public subnets : 4 , NAT gateways : In 1 az , VPC Endpoints : None >> Create VPC
+
+2. Go to Subnets and verify total 6 subnets are created [ 2 public and 4 private ] , Modify the names for the subnets like below
+
+1. demo-vpc-Public-subnet-weblayer-1a
+2. demo-vpc-Public-subnet-weblayer-1b
+3. demo-vpc-Private-subnet-applayer-1a
+4. demo-vpc-Private-subnet-applayer-1b
+5. demo-vpc-Private-subnet-databaselayer-1a
+6. demo-vpc-Private-subnet-databaselayer-1b
+
+
+3. Create below Security Groups 
+
+1. Name : External_ALB_SG [Security group for external Application load balancer]  , Description : External_ALB_SG , VPC : demo-vpc , Inbound Rules : Type - HTTP , Protocol - TCP , Port Range - 80 , Source : Anywhere [0.0.0.0/0]
+
+add rule 
+
+Inbound Rules : Type - HTTP , Protocol - TCP , Port Range - 443, Source : Anywhere [0.0.0.0/0]
+
+2. Name : Web_Tire_SG [Security group for web tire ec2 instances]  , Description : Web_Tire_SG , VPC : demo-vpc , Inbound Rules : Type - HTTP , Protocol - TCP , Port Range - 80 , Source : Custom "Web_ALB_SG" security group
+
+add rule 
+
+Inbound Rules : Type - HTTP , Protocol - TCP , Port Range - 80 , Source : Custom 192.168.0.0/22 [ This is the VPC Range] 
+
+3. Name : App_Tire_SG [Security group for App tire ec2 instances]  , Description : App_Tire_SG , VPC : demo-vpc , Inbound Rules : Type - Custom TCP , Protocol - TCP , Port Range - 4000 [Our React Js Application run on port 4000 ], Source : Custom 192.168.0.0/22 [ This is the VPC Range] 
+
+4. Name : Internal_ALB_SG [Security group for internal Application load balancer]  , Description : Internal_ALB_SG , VPC : demo-vpc , Inbound Rules : Type - HTTP , Protocol - TCP , Port Range - 80 , Source : Custom 192.168.0.0/22 [ This is the VPC Range] 
+
+5. Name : RDS_SG [Security group for Database tire]  , Description : RDS_SG  , VPC : demo-vpc , Inbound Rules : Type - MySQL/Aurora , Protocol - TCP , Port Range - 3306 , Source : Custom 192.168.0.0/22 [ This is the VPC Range] 
+
+
+4. Clone Project Repo in your local system
+
+5. Create S3 Bucket in Mumbai Region 
+
+Bucket Type : General Purpose
+Name : Demo-3tire-project
+Everything keep default > Create Bucket
+
+6. Open Bucket and upload 'application-code' [ make sure upload only application-code folder]
+
+7. Create IAM role
+
+Open IAM Service > Roles > Create Role > Entity Type : AWS Service , Use case : EC2 choose EC2  > Next > Permission policies : Select 'AmazonEC2RoleforSSM > Next > Role Name : Demo-EC2-Role >> Create Role
+
+
+8. Open RDS Services > Subnet Groups > Create DB Subnet Group > Name : DB-SNGP , Description : DB-SNGP , VPC : demo-vpc  , Availability Zones : choose 1a and 1b , Select below two subnets  "demo-vpc-Private-subnet-databaselayer-1a" and  "demo-vpc-Private-subnet-databaselayer-1b" > Create
+
+9. In RDS , Databases > Create Database > Standard Create > Engine Type : MySQL , Engine Version : latest , Template : Free Tire , DB instance identifier :  database-1 , master username : admin , Credentials Management : Self managed , master password : admin12345 , confirm master password : admin12345 , instance configuration : db.t4g.micro , storage type : General Purpose SSD (gp2) , Allocated Storage : 20 ,VPC : demo-vpc , subnet group : DB-SNGP , Existing VPC Security Group : RDS_SG , additional configuration > backup : disable , maintenance : disable auto minor version upgrade  > create database
+
+once data base is created copy database end-point URL 
+
+10. Open EC2 service > Instances > Launch instances > name : apptireinstance , AMI : amazon linux 2 AMI SSD , instance type : t2.micro , keypair : without keypair , Network Settings - VPC : demo-vpc , subnet : demo-vpc-Private-subnet-applayer-1a , select existing security group : App_Tire_SG , advanced details - IAM instance profile : Demo-EC2-Role > Launch instance 
+
+11. Select instance > connect > session manager > connect 
+
+In this instance we will do the App Server Setup and DB Server Configuration. Execute the below commands;
+Install MySQL
+$ sudo su
+#cd /home/ec2-user
+# sudo yum install mysql -y
+
+Configure MySQL Database
+
+Connect to the database and perform basic configuration: Replace below info with your DB information
+
+mysql -h <Data Base EndPoint> -u admin -p ----> Enter the Password i.e kastro2025 (this is DB password). If you couldn't connect, there is a problem with the SG of the DB.
+
+Ex: # mysql -h database-1.c380a08uukyc.ap-south-1.rds.amazonaws.com -u admin -p
+
+enter password : admin12345
+
+MySQL [(none)] >
+
+Lets create a database. The database name i'm creating is "webappdb" (This is same name that you should give in DvConfig.js file);
+
+> CREATE DATABASE webappdb;
+
+> SHOW DATABASES;
+
+USE webappdb; ----> You will see 'Database changed'
+
+Execute the below code as a single code. Here we are creating a table with the name 'transactions'
+> CREATE TABLE IF NOT EXISTS transactions(
+  id INT NOT NULL AUTO_INCREMENT, 
+  amount DECIMAL(10,2), 
+  description VARCHAR(100), 
+  PRIMARY KEY(id)
+);
+
+To verify whether table got created or not;
+> SHOW TABLES;
+
+Lets insert some info into the table
+> INSERT INTO transactions (amount, description) VALUES ('400', 'groceries');
+
+To verify whether the entry is really created or not
+> SELECT * FROM transactions;
+You will see the info you have written
+
+To come out of the DB;
+exit (You will see 'ec2-user' at the end of command line and at the beginning of command line you will see 'root')
+
+
+
+12. On your local system , open 'DbConfig.js' file and modify 'DB_HOST' URL with your database end-point url , username , password and database name
+
+example :- 
+
+module.exports = Object.freeze({
+    DB_HOST : 'database-1.c380a08uukyc.ap-south-1.rds.amazonaws.com',
+    DB_USER : 'admin',
+    DB_PWD : 'admin12345',
+    DB_DATABASE : 'webappdb'
+});
+
+13. Open S3 service , open bucket 'Demo-3tire-project' > application-code/ > app-tire/ > click 'upload' > drag and drop updated DbConfig.js file from your local system to s3 bucket > upload > now file updated successfully.
+
+
+14. Select instance > connect > session manager > connect 
+
+Install and Configure Node.js and PM2
+
+#cd /home/ec2-user
+
+# curl -o- https://raw.githubusercontent.com/avizway1/aws_3tier_architecture/main/install.sh | bash
+# source ~/.bashrc
+
+# nvm install 16
+# nvm use 16 (You will see 'Now using node v16.20.2)
+
+NVM means Node Version Manager
+ 
+To run node as a service, we will install pm2
+# npm install -g pm2 (You will see 'found 0 vulnerabilities)
+
+Download application code from S3 and start the application
+
+cd ~/
+ 
+sudo aws s3 cp s3://<S3BucketName>/application-code/app-tier/ app-tier --recursive
+
+Ex: # sudo aws s3 cp s3://demo-3tier-project/application-code/app-tier/ app-tier --recursive
+
+#ls ---> You will see 'app-tier' folder
+
+# cd app-tier/
+ 
+# npm install
+
+# ls ----> You will see 'index.js' file. We have to start that.
+
+# pm2 start index.js (You will see the status as 'online')
+
+To verify;
+
+# pm2 list (or) #pm2 status
+
+#pm2 logs (You will not see anything in red colour, everything in white colour you should see)
+
+At the end you will see something like; http://localhost:4000
+
+# pm2 startup
+# pm2 save ---> To save the configuration	
+
+Verify that the application is running by executing
+
+# curl http://localhost:4000/health
+
+It should return: This is the health check.
+
+With this we have completed the application configuration.
+
+
+15. Create internal load balancer
+
+Open EC2 service > target groups > create target group > target : instances , target group name : App-Internal-TG , Port: Protocol HTTP 4000 , IP address type : IPV4 , VPC : demo-vpc , protocol-version : HTTP1 , health check protocol : HTTP , health check path : /health > next > select app-tire instance and include as pending below > create target group
+
+Click load balancers > create load balancer > choose application load balancer and click create > load balancer name : App-Internal-LB , Scheme : Internal , load balancer ip address type : IPV4 , VPC : demo-vpc , azs : 1a (demo-vpc-Private-subnet-applayer-1a)  and 1b (demo-vpc-Private-subnet-applayer-1b) , security group : Internal_ALB_SG , Protocol : HTTP , Port : 80 , default-action Target-group : App-Internal-TG > create load balancer
+
+Copy load balancer DNS url
+
+
+16. On your local system , Open 'nginx.conf' file and in the end of the file you will see something like below;
+        #proxy for internal lb
+        location /api/{
+                proxy_pass http://[REPLACE-WITH-INTERNAL-LB-DNS]:80/;
+        }
+
+Replace the LB DNS in the above
+
+17. open bucket 'Demo-3tire-project' > application-code/ > click 'upload' > drag and drop updated 'nginx.conf' file from your local system to s3 bucket > upload > now file updated successfully.
+
+
+18.Open EC2 service > Instances > Launch instances > name : Web-Tire-Instance, AMI : amazon linux 2 AMI SSD , instance type : t2.micro , keypair : without keypair , Network Settings - VPC : demo-vpc , subnet : demo-vpc-Public-subnet-weblayer-1a , select existing security group : Web_Tire_SG , Auto assign public ip : enable(optional) , advanced details - IAM instance profile : Demo-EC2-Role > Launch instance 
+
+
+19. Select web tire instance > connect > session manager > connect 
+
+$ sudo -su ec2-user (To work as an ec2-user)    
+
+# cd /home/ec2-user
+
+#curl -o- https://raw.githubusercontent.com/avizway1/aws_3tier_architecture/main/install.sh | bash
+
+#source ~/.bashrc
+
+#nvm install 16
+
+#nvm use 16
+
+# aws s3 cp s3://<S3 Bucker Name>/application-code/web-tier/ web-tier --recursive
+
+Ex: # aws s3 cp s3://demo-3tier-project/application-code/web-tier/ web-tier --recursive
+
+#ls ----> You will see 'web-tier'
+
+# cd web-tier
+
+# npm install
+
+# npm run build
+
+
+# sudo amazon-linux-extras install nginx1 -y
+
+Update Nginx configuration:
+
+# cd /etc/nginx (Your are in nginx path)
+
+# ls ----> You will see 'nginx.conf' file
+
+# sudo rm nginx.conf
+
+# sudo aws s3 cp s3://<S3 Bucker Name>/application-code/nginx.conf .
+
+Ex: # sudo aws s3 cp s3://demo-3tier-project/application-code/nginx.conf .
+
+# sudo service nginx restart
+
+# chmod -R 755 /home/ec2-user
+
+# sudo chkconfig nginx on
+
+In Ec2 Service , Open Security Groups > Open 'Web_Tire_SG' security group > add rule > Type - HTTP , Protocol - TCP , Port Range - 80 , Source : anywhere (0.0.0.0/0) [ internet access] > save rules 
+
+To check the output of the App, we can check using the Web-Tier-Instance public IP. 
+
+Add some data in app
+
+20 . Open EC2 service > target groups > create target group > target : instances , target group name : External-Web-TG , Port: Protocol HTTP 80, IP address type : IPV4 , VPC : demo-vpc , protocol-version : HTTP1 , health check protocol : HTTP , health check path : / > next > select Web-Tire-Instance and include as pending below > create target group
+
+Click load balancers > create load balancer > choose application load balancer and click create > load balancer name : External-Web-ALB , Scheme : internet, load balancer ip address type : IPV4 , VPC : demo-vpc , azs : 1a (demo-vpc-Public-subnet-weblayer-1a)  and 1b (demo-vpc-Public-subnet-weblayer-1b) , security group : External_ALB_SG , Protocol : HTTP , Port : 80 , default-action Target-group : External-Web-TG > create load balancer
+
+21. Open Route53 service , get started > Create Hosted zones > domain name : smartspends.in , type : public hosted zone > create hosted zone 
+
+Copy name servers and paste in domain registered sites like hostinger , godaddy etccc.
+
+Create record > Record Name : leave it black [ because we are going to direct traffic to root domain ] , Type : A , enable alias > Route Traffic to - Endpoint : Alias to Application and Classic Load balancer , Choose region : mumbai , choose load balancer : select External Load Balancer , Routing policy : Simple routing > create records
+
+22. Open Certificate Manager service in aws , Request a certificate > Request a public certificate > next > Fully qualified domain name : smartspends.in , validation method : DNS validation > Request > Create records in route53 > select domain smartspends.in > create records 
+
+status should be issued 
+
+
+23. Open Ec2 service , Click load balancers > click on external load balancer > Listeners and rules >> add Listener > Protocol - HTTPS , Port : 443 , routing actions : Forward to target groups > target group : External-Web-TG , certificate source : from ACM , certificate (From ACM ) > choose smartspends.in from dropdown > add
+
+access smartspends.in > success
+
+add some data and verify in database
+
+Create Auto scaling for both webtire and apptire
+
+Open Ec2 service , instances > Select app-tire instance > actions > images and templates > create image > image name : App-tire-AMI , uncheck : reboot> create image (image created for app-tire)
+
+
+Open Ec2 service , Launch Templates > Create Launch Template > Launch Template name : App-Tire-LT , My AMIs : Select App-Tire-AMI , Instance Type : t2.micro , subnet : do not inclue in launch template , select existing security group : App_Tire_SG , advanced details - IAM instance profile : Demo-EC2-Role > Create Launch Template
+
+Open Ec2 service , Auto scaling groups > create auto scaling group > auto scaling group name : App-Tire-ASG , Launch template : choose 'App-Tire-LT' > next > VPC : demo-vpc , azs : demo-vpc-Private-subnet-applayer-1a and demo-vpc-Private-subnet-applayer-1b > next > Attach to an existing load balancer , choose from your existing load balancer target groups : App-Internal-TG > next > desired : 2 , min : 2 , max: 3 > next > next > Create Auto Scaling Group 
+
+
+Open Ec2 service , instances > Select web-tire instance > actions > images and templates > create image > image name : Web-tire-AMI  , uncheck : reboot > create image  (image created for web-tire)
+
+
+Open Ec2 service , Launch Templates > Create Launch Template > Launch Template name : Web-Tire-LT , My AMIs : Select Web-Tire-AMI , Instance Type : t2.micro , subnet : do not inclue in launch template , select existing security group : Web_Tire_SG , advanced details - IAM instance profile : Demo-EC2-Role > Create Launch Template
+
+Open Ec2 service , Auto scaling groups > create auto scaling group > auto scaling group name : Web-Tire-ASG , Launch template : choose 'Web-Tire-LT' > next > VPC : demo-vpc , azs : demo-vpc-Public-subnet-weblayer-1a and demo-vpc-Public-subnet-weblayer-1b > next > Attach to an existing load balancer , choose from your existing load balancer target groups : Web-Internal-TG > next > desired : 2 , min : 2 , max: 3 > next > next > Create Auto Scaling Group 
+
+Providing security to the instances
+
+Lets take an example of RDS_SG security group , in the above we have open entire network 192.168.0.0/22 so who is present in this network can access this RDS instance so if you want to enhance the security edit inbound rules of RDS_SG security group like   
+
+add rule
+
+ Inbound Rules : Type - MySQL/Aurora , Protocol - TCP , Port Range - 3306 , Source : Custom 
+App_Tire_SG  [This is the security group of App tire]
+
+
+similarly, take App_Tire_SG security group , in the above we have open entire network 192.168.0.0/22 so who is present in this network can access this App-tire instances so if you want to enhance the security edit inbound rules of App_Tire_SG  security group like   
+
+
+add rule
+
+Inbound Rules : Type - Custom TCP , Protocol - TCP , Port Range - 4000 [Our React Js Application run on port 4000 ], Source : Custom  Internal_ALB_SG [This is the security group of Internal Load Balancer ]
+
+
+This is about 3 tier architecture with HA and Fault Tolerance.
+
+Clean up the resources 
+
+Delete everything once its done
+First delete ASG
+Next delete both LBs
+Next delete both TGs
+Next delete both AMIs
+Next delete both Snapshots of AMIs
+Next delete DB
+Next delete S3 Bucket
+Next delete Certificate
+Next delete Route 53 record
+Next delete NAT GW
+Next delete Elastic IP. This came because of NATGW
+Next delete VPC
+
+
+By Manikanta Gunda
