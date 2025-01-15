@@ -1,0 +1,72 @@
+### AWS 3-Tier Architecture Project Overview
+
+This project involves setting up a highly available, fault-tolerant, and scalable 3-tier architecture using various AWS services. The three layers of the architecture are:
+
+1. **Web Tier**: Contains EC2 instances running the frontend application and exposed via an external load balancer (ALB).
+2. **App Tier**: Contains EC2 instances running the backend application, configured to interact with the database.
+3. **Database Tier**: Uses Amazon RDS (MySQL) to store application data, secured within private subnets.
+
+### AWS Services Used:
+
+1. **VPC (Virtual Private Cloud)**: Used to create a custom network with public and private subnets across multiple availability zones (AZs).
+2. **EC2 (Elastic Compute Cloud)**: Used for running the web and application servers in the web and app tiers.
+3. **IAM (Identity and Access Management)**: Used to manage roles and policies for access control to AWS resources.
+4. **S3 (Simple Storage Service)**: Used for storing and serving the application code.
+5. **RDS (Relational Database Service)**: Used for setting up a MySQL database in the database tier.
+6. **Certificate Manager**: Used to provision an SSL/TLS certificate for secure communication with the external load balancer.
+7. **Route 53**: Used for DNS management, routing traffic to the load balancers based on domain names.
+8. **EC2 Auto Scaling**: Automatically adjusts the number of EC2 instances in the app and web tiers based on load.
+9. **ALB (Application Load Balancer)**: Used to distribute incoming traffic to EC2 instances in the web and app tiers (both external and internal).
+10. **Nginx**: Used as a reverse proxy in the web tier to route traffic to the app tier.
+
+### Architecture Overview:
+
+1. **VPC Setup**:
+   - A VPC (`demo-vpc`) is created with public and private subnets across two availability zones.
+   - Security groups are configured for different tiers (Web, App, RDS) with specific inbound and outbound rules.
+
+2. **EC2 Instances**:
+   - Web tier: EC2 instances that serve the frontend application are placed in public subnets.
+   - App tier: EC2 instances running the backend are placed in private subnets.
+   - Both tiers are configured to connect with their respective load balancers (internal for app tier, external for web tier).
+
+3. **Database Setup**:
+   - RDS (MySQL) is deployed within the private subnets to handle persistent data storage.
+
+4. **Code Deployment**:
+   - Application code is stored in an S3 bucket and downloaded to EC2 instances for deployment.
+   - EC2 instances in the app tier are configured to interact with the MySQL database.
+
+5. **Load Balancing**:
+   - External ALB routes traffic from the internet to the web tier, while internal ALB routes traffic from the web tier to the app tier.
+
+6. **SSL Setup**:
+   - SSL certificates are provisioned using AWS Certificate Manager (ACM) for secure communication via HTTPS.
+
+7. **Auto Scaling**:
+   - Auto scaling groups are configured to scale EC2 instances in the web and app tiers based on demand.
+
+8. **Route 53 Configuration**:
+   - Route 53 is used to manage the DNS records, associating the domain (`smartspends.in`) with the load balancer.
+
+### Step-by-Step Configuration:
+- **VPC and Subnet Creation**: The VPC is created with two public and four private subnets. The subnets are named according to their purpose (web, app, database).
+- **Security Groups**: Custom security groups are created for the web, app, and database tiers with specific rules to control access.
+- **EC2 Instance Setup**: Instances are launched for the web and app tiers with IAM roles and security groups configured.
+- **Database Configuration**: RDS MySQL instance is created with private subnet access and security group restrictions.
+- **Application Setup**: Application code is downloaded from S3, configured, and started on EC2 instances.
+- **Load Balancers**: Both internal and external load balancers are configured for the app and web tiers, respectively.
+- **Scaling and Fault Tolerance**: Auto scaling groups are configured for both web and app tiers for automatic scaling based on demand.
+
+### Key Steps:
+1. **VPC Creation**: Establish the network infrastructure, including subnets, NAT gateway, and security groups.
+2. **EC2 Instances**: Deploy EC2 instances in both web and app tiers with appropriate IAM roles and security group settings.
+3. **RDS Database**: Set up an RDS MySQL instance for data storage and configure it for secure access from the app tier.
+4. **Code Deployment**: Upload the application code to an S3 bucket, then download and configure it on the EC2 instances.
+5. **ALB Setup**: Create external and internal ALBs for traffic distribution and routing between tiers.
+6. **SSL/TLS Setup**: Configure SSL certificates for secure communication using ACM.
+7. **DNS and Routing**: Use Route 53 for domain management and associate the load balancers with the domain name.
+8. **Auto Scaling**: Configure auto scaling for both web and app tiers to handle varying loads.
+9. **Security Enhancements**: Fine-tune security groups for restricted access based on tier-specific communication needs.
+
+This architecture ensures a scalable, highly available, and secure application infrastructure that can handle varying levels of traffic while ensuring proper separation of concerns between the web, application, and database layers.
